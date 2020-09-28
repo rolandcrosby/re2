@@ -44,6 +44,23 @@ else:
   _LRUCache = functools.lru_cache
   _HAVE_LRU_CACHE = True
 
+try:
+  from re import RegexFlag as _RegexFlag
+  _HAVE_REGEX_FLAG = True
+  I = IGNORECASE = _RegexFlag.IGNORECASE
+  M = MULTILINE = _RegexFlag.MULTILINE
+  S = DOTALL = _RegexFlag.DOTALL
+  U = UNICODE = _RegexFlag.UNICODE
+  _UNSUPPORTED_REGEX_FLAGS = (
+    _RegexFlag.ASCII,
+    _RegexFlag.LOCALE,
+    _RegexFlag.VERBOSE,
+    _RegexFlag.TEMPLATE,
+    _RegexFlag.DEBUG
+  )
+except ImportError:
+  _HAVE_REGEX_FLAG = False
+
 
 class error(Exception):
   pass
@@ -69,44 +86,60 @@ class Options(_re2.RE2.Options):
       'one_line',
   )
 
-
-def compile(pattern, options=None):
+def compile(pattern, options=None, *, flags=None):
+  if options and flags:
+    raise ValueError('re2 options and re flags cannot be mixed')
+  if _HAVE_REGEX_FLAG:
+    if flags or isinstance(options, _RegexFlag):
+      if isinstance(options, _RegexFlag):
+        flags = options
+      options = Options()
+      for flag in _UNSUPPORTED_REGEX_FLAGS:
+        if flags & flag:
+          raise ValueError('re.{} is not supported by re2'.format(flag.name))
+      options.case_sensitive = not flags & _RegexFlag.IGNORECASE
+      if flags & _RegexFlag.MULTILINE:
+        if not pattern.startswith('(?m)'):
+          pattern = '(?m)' + pattern
+      options.dot_nl = bool(flags & _RegexFlag.DOTALL)
+  elif flags:
+    raise ValueError('re flags are not supported by re2 in this environment')
   if not options:
     options = Options()
   values = tuple(getattr(options, name) for name in Options.NAMES)
   return _Regexp._make(pattern, values)
 
 
-def search(pattern, text, options=None):
-  return compile(pattern, options=options).search(text)
+def search(pattern, text, options=None, *, flags=None):
+  return compile(pattern, options=options, flags=flags).search(text)
 
 
-def match(pattern, text, options=None):
-  return compile(pattern, options=options).match(text)
+def match(pattern, text, options=None, *, flags=None):
+  return compile(pattern, options=options, flags=flags).match(text)
 
 
-def fullmatch(pattern, text, options=None):
-  return compile(pattern, options=options).fullmatch(text)
+def fullmatch(pattern, text, options=None, *, flags=None):
+  return compile(pattern, options=options, flags=flags).fullmatch(text)
 
 
-def finditer(pattern, text, options=None):
-  return compile(pattern, options=options).finditer(text)
+def finditer(pattern, text, options=None, *, flags=None):
+  return compile(pattern, options=options, flags=flags).finditer(text)
 
 
-def findall(pattern, text, options=None):
-  return compile(pattern, options=options).findall(text)
+def findall(pattern, text, options=None, *, flags=None):
+  return compile(pattern, options=options, flags=flags).findall(text)
 
 
-def split(pattern, text, maxsplit=0, options=None):
-  return compile(pattern, options=options).split(text, maxsplit)
+def split(pattern, text, maxsplit=0, options=None, *, flags=None):
+  return compile(pattern, options=options, flags=flags).split(text, maxsplit)
 
 
-def subn(pattern, repl, text, count=0, options=None):
-  return compile(pattern, options=options).subn(repl, text, count)
+def subn(pattern, repl, text, count=0, options=None, *, flags=None):
+  return compile(pattern, options=options, flags=flags).subn(repl, text, count)
 
 
-def sub(pattern, repl, text, count=0, options=None):
-  return compile(pattern, options=options).sub(repl, text, count)
+def sub(pattern, repl, text, count=0, options=None, *, flags=None):
+  return compile(pattern, options=options, flags=flags).sub(repl, text, count)
 
 
 def _encode(t):
